@@ -1,29 +1,28 @@
 package main
 
 import (
+	"bufio"
+	"code.google.com/p/go.net/websocket"
+	"container/list"
 	"database/sql"
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"html/template"
+	"io"
 	"io/ioutil"
 	"log"
 	"mysql/mysqlfunc"
 	"net/http"
 	"os"
 	"path"
-    "io"
-    "bufio"
-    "code.google.com/p/go.net/websocket"
-    "container/list"
 )
 
 const (
 	TEMPLATE_DIR = "../views"
 )
 
-
-var connid  int
-var conns   *list.List
+var connid int
+var conns *list.List
 
 var templates = make(map[string]*template.Template)
 var mysqlinfo = mysqlfunc.Db_info{"127.0.0.1", "root", "", "web_chat_go"}
@@ -59,56 +58,52 @@ func check(err error) {
 	}
 }
 
-
-
 func ChatroomServer(ws *websocket.Conn) {
-    defer ws.Close()
-    
-    connid++
-    id := connid
-    
-    fmt.Printf("connection id: %d\n", id)
-    
-    item := conns.PushBack(ws)
-    defer conns.Remove(item)
-    
-    name := fmt.Sprintf("user%d", id)
-    
-    SendMessage(nil, fmt.Sprintf("welcome %s join\n", name))
-    
-    r := bufio.NewReader(ws)
-    
-    for {
-        data, err := r.ReadBytes('\n')
-        if err != nil {
-            fmt.Printf("disconnected id: %d\n", id)
-            SendMessage(item, fmt.Sprintf("%s offline\n", name))
-            break
-        }
-    
-        fmt.Printf("%s: %s", name, data)
-    
-        SendMessage(item, fmt.Sprintf("%s\t> %s", name, data))
-    }
+	defer ws.Close()
+
+	connid++
+	id := connid
+
+	fmt.Printf("connection id: %d\n", id)
+
+	item := conns.PushBack(ws)
+	defer conns.Remove(item)
+
+	name := fmt.Sprintf("user%d", id)
+
+	SendMessage(nil, fmt.Sprintf("welcome %s join\n", name))
+
+	r := bufio.NewReader(ws)
+
+	for {
+		data, err := r.ReadBytes('\n')
+		if err != nil {
+			fmt.Printf("disconnected id: %d\n", id)
+			SendMessage(item, fmt.Sprintf("%s offline\n", name))
+			break
+		}
+
+		fmt.Printf("%s: %s", name, data)
+
+		SendMessage(item, fmt.Sprintf("%s\t> %s", name, data))
+	}
 }
-    
+
 func SendMessage(self *list.Element, data string) {
-    // for _, item := range conns {
-    for item := conns.Front(); item != nil; item = item.Next() {
-        ws, ok := item.Value.(*websocket.Conn)
-        if !ok {
-            panic("item not *websocket.Conn")
-        }
-    
-        if item == self {
-            continue
-        }
-    
+	// for _, item := range conns {
+	for item := conns.Front(); item != nil; item = item.Next() {
+		ws, ok := item.Value.(*websocket.Conn)
+		if !ok {
+			panic("item not *websocket.Conn")
+		}
 
-        io.WriteString(ws, data)
-    }
+		if item == self {
+			continue
+		}
+
+		io.WriteString(ws, data)
+	}
 }
-
 
 /**********************************************************/
 /*              write  the   html   page                  */
@@ -148,7 +143,7 @@ func userLoad(w http.ResponseWriter, r *http.Request) {
 			err := templates["userload.html"].Execute(w, "用户名或密码错误")
 			check(err)
 		} else {
-		  renderHtml(w,"web_js",nil)
+			renderHtml(w, "web_js", nil)
 		}
 	}
 }
@@ -170,17 +165,16 @@ func picture_down(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image")
 	http.ServeFile(w, r, imgpath)
 }
-func js_down(w http.ResponseWriter,r * http.Request) {
-    imgpath:="../img/js/jquery.min.js"
-    if exist :=isExists(imgpath);!exist {
-    	http.NotFound(w,r)
-    	return
-    }
+func js_down(w http.ResponseWriter, r *http.Request) {
+	imgpath := "../img/js/jquery.min.js"
+	if exist := isExists(imgpath); !exist {
+		http.NotFound(w, r)
+		return
+	}
 
-    w.Header().Set("Content-Type","image")
-    http.ServeFile(w,r,imgpath)
+	w.Header().Set("Content-Type", "image")
+	http.ServeFile(w, r, imgpath)
 }
-
 
 /**********************************************************/
 /*             user  register  func                       */
@@ -231,7 +225,6 @@ func register_user(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-
 /*
 func safeHandler(fn http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -254,32 +247,31 @@ func safeHandler(fn http.HandlerFunc) http.HandlerFunc {
 */
 func main() {
 
-      connid = 0
-    conns = list.New()
+	connid = 0
+	conns = list.New()
 
+	/*	mux := http.NewServeMux()
+		mux.HandleFunc("/", safeHandler(userLoad))
+		mux.HandleFunc("/img", safeHandler(picture_down))
+		mux.HandleFunc("js",safeHandler(js_down))
+		mux.HandleFunc("/register", safeHandler(register_user))
+		mux.Handle("/chatroom",websocket.Handler(ChatroomServer))
 
-/*	mux := http.NewServeMux()
-	mux.HandleFunc("/", safeHandler(userLoad))
-	mux.HandleFunc("/img", safeHandler(picture_down))
-	mux.HandleFunc("js",safeHandler(js_down))
-	mux.HandleFunc("/register", safeHandler(register_user))
-	mux.Handle("/chatroom",websocket.Handler(ChatroomServer)) 
+		err := http.ListenAndServe(":7777", mux)
+		if err != nil {
+			log.Fatal("ListenAndServe: ", err.Error())
+		}
 
-	err := http.ListenAndServe(":7777", mux)
+	*/
+	http.Handle("/chatroom", websocket.Handler(ChatroomServer))
+	http.HandleFunc("/", userLoad)
+	http.HandleFunc("/img", picture_down)
+	http.HandleFunc("/js", js_down)
+	http.HandleFunc("/register", register_user)
+
+	err := http.ListenAndServe(":7777", nil)
 	if err != nil {
-		log.Fatal("ListenAndServe: ", err.Error())
+		panic("ListenAndServe: " + err.Error())
 	}
-
-*/
-   http.Handle("/chatroom", websocket.Handler(ChatroomServer));
-    http.HandleFunc("/", userLoad);
-    http.HandleFunc("/img",picture_down)
-    http.HandleFunc("/js",js_down)
-    http.HandleFunc("/register",register_user)
-  
-    err := http.ListenAndServe(":7777", nil);
-    if err != nil {
-        panic("ListenAndServe: " + err.Error())
-    }
 
 }
