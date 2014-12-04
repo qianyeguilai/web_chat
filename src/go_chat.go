@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"path"
-//	"runtime/debug"
     "io"
     "bufio"
     "code.google.com/p/go.net/websocket"
