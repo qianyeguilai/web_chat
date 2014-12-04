@@ -1,0 +1,61 @@
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>golang websocket chatroom</title>
+
+   <script src="/js"></script>
+    <script  type="text/javascript">
+        var ws = new WebSocket("ws://192.168.1.11:7777/chatroom");
+        ws.onopen = function(e){
+            console.log("onopen");
+            console.dir(e);
+        };
+        ws.onmessage = function(e){
+            console.log("onmessage");
+            console.dir(e);
+            $('#log').append('<p align="left">'+e.data+'<p>');
+            $('#log').get(0).scrollTop = $('#log').get(0).scrollHeight;
+        };
+        ws.onclose = function(e){
+            console.log("onclose");
+            console.dir(e);
+        };
+        ws.onerror = function(e){
+            console.log("onerror");
+            console.dir(e);
+        };
+        $(function(){
+            $('#msgform').submit(function(){
+                ws.send($('#msg').val()+"\n");
+                $('#log').append('<p  align="right" style="color:red;" > '+$('#msg').val()+ '<<<my' +'<p>');
+                $('#log').get(0).scrollTop = $('#log').get(0).scrollHeight;
+                $('#msg').val('');
+                return false;
+            });
+        });
+    </script> 
+</head>
+<body  background="/img?pic_name=beijing.jpg" >
+
+
+    <center>
+      <div  id="log" style="height: 500px;width:400px;overflow-y: scroll;border: 2px solid #CCC;">
+              
+         
+
+      </div>
+      <div>
+         <form id="msgform">
+             <input type="text" id="msg" size="49" />
+         </form>
+     </div>
+    </div> 
+
+
+</center>
+<center>
+<span style="font-family: arial;">Copyright
+                &copy;2014&nbsp;&nbsp;版权所有&nbsp;&nbsp;侵权必究</span>
+</center>
+</body>
+</html>
