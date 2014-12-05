@@ -23,7 +23,6 @@ const (
 
 var connid int
 var conns *list.List
-
 var templates = make(map[string]*template.Template)
 var mysqlinfo = mysqlfunc.Db_info{"127.0.0.1", "root", "", "web_chat_go"}
 var mysql_db *sql.DB
@@ -32,6 +31,7 @@ func init() {
 	fileInfoArr, err := ioutil.ReadDir(TEMPLATE_DIR)
 	check(err)
 	var templateName, templatePath string
+
 	for _, fileInfo := range fileInfoArr {
 		templateName = fileInfo.Name()
 		if ext := path.Ext(templateName); ext != ".html" {
@@ -43,18 +43,85 @@ func init() {
 		templates[templateName] = t
 	}
 
-	x, err1 := mysqlfunc.ConnectDb(mysqlinfo)
+	temp_db, err1 := mysqlfunc.ConnectDb(mysqlinfo)
 	if err1 != nil {
 		fmt.Println("ConnectDb  error:", err1)
 		return
 	}
 	check(err1)
-	mysql_db = x
+	mysql_db = temp_db
 }
 
 func check(err error) {
 	if err != nil {
 		panic(err)
+	}
+}
+
+func renderHtml(w http.ResponseWriter, tmpl string, locals map[string]interface{}) {
+	tmpl += ".html"
+	err := templates[tmpl].Execute(w, locals)
+	check(err)
+}
+
+func userLoad(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "GET" {
+		err := templates["userload.html"].Execute(w, nil)
+		check(err)
+	}
+	if r.Method == "POST" {
+		r.ParseForm()
+		ok := mysqlfunc.Checkuserok(mysql_db, r.Form["userName"], r.Form["password"])
+		if !ok {
+			err := templates["userload.html"].Execute(w, "用户名或密码错误")
+			check(err)
+		} else {
+			renderHtml(w, "web_js", nil)
+		}
+	}
+}
+
+func register_user(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "GET" {
+		err := templates["register.html"].Execute(w, nil)
+		check(err)
+	}
+
+	if r.Method == "POST" {
+		r.ParseForm()
+		username := r.Form["username"]
+		password1 := r.Form["password1"]
+		password2 := r.Form["password2"]
+		sex := r.Form["sex"]
+
+		if username[0] == "" || password1[0] == "" || sex[0] == "" || password2[0] == "" {
+			err := templates["register.html"].Execute(w, "请填写完整信息")
+			check(err)
+			return
+		}
+
+		if password1[0] != password2[0] {
+			err := templates["register.html"].Execute(w, "两次密码不一致，请重试")
+			check(err)
+		} else {
+			exist, err := mysqlfunc.Judge_user_exist(mysql_db, username[0])
+			if err != nil {
+				check(err)
+				return
+			}
+
+			if exist != true {
+				err = templates["register.html"].Execute(w, "该用户名被占用")
+				check(err)
+			}
+			err = mysqlfunc.Db_register_user(mysql_db, username[0], password1[0], sex[0])
+			if err != nil {
+				panic(err)
+			}
+			temp_str := fmt.Sprintf("注册成功:帐号%s,密码%s", username[0], password1[0])
+			err = templates["register.html"].Execute(w, temp_str)
+			check(err)
+		}
 	}
 }
 
@@ -105,53 +172,6 @@ func SendMessage(self *list.Element, data string) {
 	}
 }
 
-/**********************************************************/
-/*              write  the   html   page                  */
-/*                                                        */
-/**********************************************************/
-func renderHtml(w http.ResponseWriter, tmpl string, locals map[string]interface{}) {
-	tmpl += ".html"
-	err := templates[tmpl].Execute(w, locals)
-	check(err)
-}
-
-/*********************************************************/
-/*               judge  the file  path  exist            */
-/*                                                       */
-/*********************************************************/
-func isExists(path string) bool {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true
-	}
-	return os.IsExist(err)
-}
-
-/*********************************************************/
-/*              user   load  func                        */
-/*                                                       */
-/*********************************************************/
-func userLoad(w http.ResponseWriter, r *http.Request) {
-	if r.Method == "GET" {
-		err := templates["userload.html"].Execute(w, nil)
-		check(err)
-	}
-	if r.Method == "POST" {
-		r.ParseForm()
-		ok := mysqlfunc.Checkuserok(mysql_db, r.Form["userName"], r.Form["password"])
-		if !ok {
-			err := templates["userload.html"].Execute(w, "用户名或密码错误")
-			check(err)
-		} else {
-			renderHtml(w, "web_js", nil)
-		}
-	}
-}
-
-/*********************************************************/
-/*            download the  html picture                 */
-/*                                                       */
-/*********************************************************/
 func picture_down(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	imageId := r.Form["pic_name"]
@@ -165,6 +185,7 @@ func picture_down(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image")
 	http.ServeFile(w, r, imgpath)
 }
+
 func js_down(w http.ResponseWriter, r *http.Request) {
 	imgpath := "../img/js/jquery.min.js"
 	if exist := isExists(imgpath); !exist {
@@ -176,100 +197,26 @@ func js_down(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, imgpath)
 }
 
-/**********************************************************/
-/*             user  register  func                       */
-/*                                                        */
-/**********************************************************/
-func register_user(w http.ResponseWriter, r *http.Request) {
-	if r.Method == "GET" {
-		err := templates["register.html"].Execute(w, nil)
-		check(err)
+func isExists(path string) bool {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true
 	}
-
-	if r.Method == "POST" {
-		r.ParseForm()
-		username := r.Form["username"]
-		password1 := r.Form["password1"]
-		password2 := r.Form["password2"]
-		sex := r.Form["sex"]
-
-		if username[0] == "" || password1[0] == "" || sex[0] == "" || password2[0] == "" {
-			fmt.Println("---------------------------")
-			err := templates["register.html"].Execute(w, "请填写完整信息")
-			check(err)
-			return
-		}
-
-		if password1[0] != password2[0] {
-			err := templates["register.html"].Execute(w, "两次密码不一致，请重试")
-			check(err)
-		} else {
-			exist, err := mysqlfunc.Judge_user_exist(mysql_db, username[0])
-			if err != nil {
-				check(err)
-				return
-			}
-
-			if exist != true {
-				err = templates["register.html"].Execute(w, "该用户名被占用")
-				check(err)
-			}
-			err = mysqlfunc.Db_register_user(mysql_db, username[0], password1[0], sex[0])
-			if err != nil {
-				panic(err)
-			}
-			temp_str := fmt.Sprintf("注册成功:帐号%s,密码%s", username[0], password1[0])
-			err = templates["register.html"].Execute(w, temp_str)
-			check(err)
-		}
-	}
+	return os.IsExist(err)
 }
 
-/*
-func safeHandler(fn http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		defer func() {
-			if e, ok := recover().(error); ok {
-				http.Error(w, e.Error(), http.StatusInternalServerError)
-
-				// 或者输出自定义的 50x 错误页面
-				// w.WriteHeader(http.StatusInternalServerError)
-				// renderHtml(w, "error", e.Error())
-
-				// logging
-				log.Println("WARN: panic fired in %v.panic - %v", fn, e)
-				log.Println(string(debug.Stack()))
-			}
-		}()
-		fn(w, r)
-	}
-}
-*/
 func main() {
 
 	connid = 0
 	conns = list.New()
 
-	/*	mux := http.NewServeMux()
-		mux.HandleFunc("/", safeHandler(userLoad))
-		mux.HandleFunc("/img", safeHandler(picture_down))
-		mux.HandleFunc("js",safeHandler(js_down))
-		mux.HandleFunc("/register", safeHandler(register_user))
-		mux.Handle("/chatroom",websocket.Handler(ChatroomServer))
-
-		err := http.ListenAndServe(":7777", mux)
-		if err != nil {
-			log.Fatal("ListenAndServe: ", err.Error())
-		}
-
-	*/
-	http.Handle("/chatroom", websocket.Handler(ChatroomServer))
 	http.HandleFunc("/", userLoad)
-	http.HandleFunc("/img", picture_down)
 	http.HandleFunc("/js", js_down)
+	http.HandleFunc("/img", picture_down)
 	http.HandleFunc("/register", register_user)
+	http.Handle("/chatroom", websocket.Handler(ChatroomServer))
 
-	err := http.ListenAndServe(":7777", nil)
+	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
 		panic("ListenAndServe: " + err.Error())
 	}
